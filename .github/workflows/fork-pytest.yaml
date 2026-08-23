@@ -1,0 +1,42 @@
+### FORK-ONLY WORKFLOW — do not include in a PR to upstream.
+#
+# Upstream CI (lint-validation.yaml) installs pytest but never runs it; it only
+# executes utils/quick_lint.sh, which is ruff + mypy. So the 122 test files are
+# never exercised by CI.
+#
+# This workflow exists so changes can be validated on our fork before opening a
+# PR, because the suite CANNOT run on Windows: homeassistant/runner.py does
+# `import fcntl`, which is Unix-only, so pytest-homeassistant-custom-component
+# fails to import. ubuntu-latest is the same runner upstream uses.
+#
+# See 6508 docs/choreops-dev-notes.md.
+
+name: Fork Tests
+
+on:
+  push:
+    branches-ignore:
+      - main
+  workflow_dispatch:
+
+jobs:
+  pytest:
+    runs-on: ubuntu-latest
+    name: pytest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.13"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install pytest pytest-asyncio pytest-homeassistant-custom-component
+          pip install types-python-dateutil types-PyYAML
+
+      - name: Run tests
+        run: python -m pytest tests/ -q --tb=short -p no:randomly
