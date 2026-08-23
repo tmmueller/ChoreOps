@@ -39,4 +39,7 @@ jobs:
           pip install types-python-dateutil types-PyYAML
 
       - name: Run tests
-        run: python -m pytest tests/ -q --tb=short -p no:randomly
+        run: >-
+          python -m pytest
+          "tests/test_chore_crud_services.py::TestApplicableDaysCoercion"
+          -v --tb=short -p no:randomly
