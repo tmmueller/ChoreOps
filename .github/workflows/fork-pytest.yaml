@@ -38,5 +38,21 @@ jobs:
           pip install pytest pytest-asyncio pytest-homeassistant-custom-component
           pip install types-python-dateutil types-PyYAML
 
+      # pytest-homeassistant-custom-component expects testing_config/.storage to
+      # exist, but an EMPTY DIRECTORY IS NOT PACKAGED IN A WHEEL, so a fresh
+      # install never ships it and eight tests in test_backup_flow_navigation.py
+      # die with FileNotFoundError. Nothing to do with ChoreOps.
+      #
+      # Without this the workflow is permanently red, and a CI that is always red
+      # reports nothing - the next real regression would look identical to the
+      # status quo. Verified 2026-09-21: creating the directory takes that file
+      # from 8 failed / 15 passed to 23 passed, and the failures are NOT
+      # history-dependent (a second run in the same container fails identically),
+      # so this has to be done explicitly rather than warmed up by a prior run.
+      - name: Create the testing_config/.storage the wheel omits
+        run: |
+          PKG=$(python -c 'import pytest_homeassistant_custom_component as p, os; print(os.path.dirname(p.__file__))')
+          mkdir -p "$PKG/testing_config/.storage"
+
       - name: Run tests
         run: python -m pytest tests/ -q --tb=short -p no:randomly
