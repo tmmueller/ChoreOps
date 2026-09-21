@@ -46,7 +46,7 @@ See Also:
 from __future__ import annotations
 
 import datetime
-from typing import Any, cast
+from typing import Any, Literal, cast
 import uuid
 
 from . import const
@@ -121,6 +121,25 @@ def _resolve_user_input_field(
     if existing is not None:
         return existing.get(data_key, default)
     return default
+
+
+def _narrow_notification_priority(value: Any) -> Literal["", "normal", "high"]:
+    """Coerce a stored notification priority to the closed set.
+
+    The field is a closed enum, so the builder should not write back whatever it
+    happened to read. A stored value can come from a hand-edited backup or an
+    option renamed in a past version; anything unrecognised is treated as unset
+    rather than persisted verbatim.
+
+    ``""`` is a real member, not a failure case - it is what a profile that has
+    never touched this setting stores, and the payload helper reads it as "leave
+    delivery alone".
+    """
+    if value == const.NOTIFY_PRIORITY_HIGH:
+        return const.NOTIFY_PRIORITY_HIGH
+    if value == const.NOTIFY_PRIORITY_NORMAL:
+        return const.NOTIFY_PRIORITY_NORMAL
+    return ""
 
 
 def _normalize_user_select_value(value: Any) -> str:
@@ -896,7 +915,10 @@ def build_user_assignment_profile(
                 "",
             )
         ),
-        const.DATA_USER_NOTIFICATION_PRIORITY: str(
+        # Narrowed to the closed set rather than str()'d, so an unrecognised
+        # stored value (hand-edited backup, renamed option) becomes "unset"
+        # instead of being written back verbatim and typed as something it is not.
+        const.DATA_USER_NOTIFICATION_PRIORITY: _narrow_notification_priority(
             _resolve_user_input_field(
                 user_input,
                 existing_data,
@@ -1253,7 +1275,10 @@ def build_user_profile(
                 "",
             )
         ),
-        const.DATA_USER_NOTIFICATION_PRIORITY: str(
+        # Narrowed to the closed set rather than str()'d, so an unrecognised
+        # stored value (hand-edited backup, renamed option) becomes "unset"
+        # instead of being written back verbatim and typed as something it is not.
+        const.DATA_USER_NOTIFICATION_PRIORITY: _narrow_notification_priority(
             _resolve_user_input_field(
                 user_input,
                 existing_data,
