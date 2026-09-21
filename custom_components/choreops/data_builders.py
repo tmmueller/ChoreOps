@@ -142,6 +142,34 @@ def _narrow_notification_priority(value: Any) -> Literal["", "normal", "high"]:
     return ""
 
 
+def _narrow_notification_importance(
+    value: Any,
+) -> Literal["", "min", "low", "default", "high", "max"]:
+    """Coerce a stored notification importance to the closed set.
+
+    The chore builder returns through ``cast("ChoreData", ...)``, so mypy cannot
+    check this field against its ``Literal`` on its own - narrowing here is what
+    makes the runtime guard in the notification manager provably redundant
+    rather than the only thing enforcing the set.
+
+    ``""`` is a real member: it is what a chore that has never set an importance
+    stores, and the payload helper reads it as "send no importance key".
+    """
+    if value in const.NOTIFY_IMPORTANCE_OPTIONS:
+        # The membership test above is what makes this narrowing sound; mypy
+        # cannot see through a tuple lookup, so the branches are spelled out.
+        if value == "min":
+            return "min"
+        if value == "low":
+            return "low"
+        if value == const.NOTIFY_IMPORTANCE_DEFAULT:
+            return "default"
+        if value == "high":
+            return "high"
+        return "max"
+    return ""
+
+
 def _normalize_user_select_value(value: Any) -> str:
     """Normalize selector sentinel values used by user-profile forms."""
     if value in (const.SENTINEL_EMPTY, const.SENTINEL_NO_SELECTION):
@@ -1878,7 +1906,7 @@ def build_chore(
             const.DATA_CHORE_NOTIFICATION_CHANNEL: str(
                 get_field(const.DATA_CHORE_NOTIFICATION_CHANNEL, "") or ""
             ),
-            const.DATA_CHORE_NOTIFICATION_IMPORTANCE: str(
+            const.DATA_CHORE_NOTIFICATION_IMPORTANCE: _narrow_notification_importance(
                 get_field(const.DATA_CHORE_NOTIFICATION_IMPORTANCE, "") or ""
             ),
             # Runtime tracking (preserve existing values on update)
