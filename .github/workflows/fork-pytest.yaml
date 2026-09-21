@@ -1,0 +1,58 @@
+### FORK-ONLY WORKFLOW — do not include in a PR to upstream.
+#
+# Upstream CI (lint-validation.yaml) installs pytest but never runs it; it only
+# executes utils/quick_lint.sh, which is ruff + mypy. So the 122 test files are
+# never exercised by CI.
+#
+# This workflow exists so changes can be validated on our fork before opening a
+# PR, because the suite CANNOT run on Windows: homeassistant/runner.py does
+# `import fcntl`, which is Unix-only, so pytest-homeassistant-custom-component
+# fails to import. ubuntu-latest is the same runner upstream uses.
+#
+# See 6508 docs/choreops-dev-notes.md.
+
+name: Fork Tests
+
+on:
+  push:
+    branches-ignore:
+      - main
+  workflow_dispatch:
+
+jobs:
+  pytest:
+    runs-on: ubuntu-latest
+    name: pytest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.14"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install pytest pytest-asyncio pytest-homeassistant-custom-component
+          pip install types-python-dateutil types-PyYAML
+
+      # pytest-homeassistant-custom-component expects testing_config/.storage to
+      # exist, but an EMPTY DIRECTORY IS NOT PACKAGED IN A WHEEL, so a fresh
+      # install never ships it and eight tests in test_backup_flow_navigation.py
+      # die with FileNotFoundError. Nothing to do with ChoreOps.
+      #
+      # Without this the workflow is permanently red, and a CI that is always red
+      # reports nothing - the next real regression would look identical to the
+      # status quo. Verified 2026-09-21: creating the directory takes that file
+      # from 8 failed / 15 passed to 23 passed, and the failures are NOT
+      # history-dependent (a second run in the same container fails identically),
+      # so this has to be done explicitly rather than warmed up by a prior run.
+      - name: Create the testing_config/.storage the wheel omits
+        run: |
+          PKG=$(python -c 'import pytest_homeassistant_custom_component as p, os; print(os.path.dirname(p.__file__))')
+          mkdir -p "$PKG/testing_config/.storage"
+
+      - name: Run tests
+        run: python -m pytest tests/ -q --tb=short -p no:randomly
