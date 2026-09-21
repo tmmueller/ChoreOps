@@ -148,24 +148,32 @@ def _narrow_notification_importance(
     """Coerce a stored notification importance to the closed set.
 
     The chore builder returns through ``cast("ChoreData", ...)``, so mypy cannot
-    check this field against its ``Literal`` on its own - narrowing here is what
-    makes the runtime guard in the notification manager provably redundant
-    rather than the only thing enforcing the set.
+    check this field against its ``Literal`` on its own. Narrowing here means an
+    unrecognised stored value - a hand-edited backup, an option renamed in a past
+    version - becomes unset rather than being written back verbatim.
 
     ``""`` is a real member: it is what a chore that has never set an importance
     stores, and the payload helper reads it as "send no importance key".
+
+    ⚠️ This does NOT make the manager's runtime check redundant. ``build_chore``
+    runs on create and update, so a chore already sitting in ``.storage`` is
+    loaded without passing through here - which is exactly the hand-edited-backup
+    case - until something next saves it.
     """
-    if value in const.NOTIFY_IMPORTANCE_OPTIONS:
-        # The membership test above is what makes this narrowing sound; mypy
-        # cannot see through a tuple lookup, so the branches are spelled out.
-        if value == "min":
-            return "min"
-        if value == "low":
-            return "low"
-        if value == const.NOTIFY_IMPORTANCE_DEFAULT:
-            return "default"
-        if value == "high":
-            return "high"
+    # 🔑 EXPLICIT COMPARISONS, NOT A MEMBERSHIP TEST WITH A FALLTHROUGH.
+    # An earlier version gated on `value in NOTIFY_IMPORTANCE_OPTIONS` and ended
+    # `return "max"`, so adding a sixth option to that tuple would have silently
+    # mapped it to the LOUDEST setting, with mypy green because "max" is a valid
+    # member. Spelling each one out means a new option falls to "" instead.
+    if value == "min":
+        return "min"
+    if value == "low":
+        return "low"
+    if value == const.NOTIFY_IMPORTANCE_DEFAULT:
+        return "default"
+    if value == "high":
+        return "high"
+    if value == "max":
         return "max"
     return ""
 

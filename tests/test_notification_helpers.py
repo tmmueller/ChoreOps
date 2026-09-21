@@ -728,6 +728,69 @@ class TestSettingsSurviveTheDataBuilders:
 
         assert built[const.DATA_CHORE_NOTIFICATION_IMPORTANCE] == "high"
 
+    @pytest.mark.parametrize("stored", ["min", "low", "default", "high", "max", ""])
+    def test_every_importance_member_round_trips(self, stored: str) -> None:
+        """Each member of the closed set survives the builder unchanged.
+
+        The narrowing is a ladder of explicit comparisons, so a member with no
+        branch of its own would silently become something else. Only a sweep of
+        the whole set catches that; testing one value hits one branch.
+        """
+        built = build_chore(
+            user_input={
+                const.DATA_CHORE_NAME: "Medicine",
+                const.DATA_CHORE_NOTIFICATION_CHANNEL: "Medicine",
+                const.DATA_CHORE_NOTIFICATION_IMPORTANCE: stored,
+            },
+            existing=None,
+        )
+
+        assert built[const.DATA_CHORE_NOTIFICATION_IMPORTANCE] == stored
+
+    @pytest.mark.parametrize("stored", ["urgent", "HIGH", "1", "none", "maximum"])
+    def test_unrecognised_importance_becomes_unset_not_verbatim(
+        self, stored: str
+    ) -> None:
+        """A value from a hand-edited backup is dropped, never written back.
+
+        🔑 `"maximum"` is the case that matters: an earlier version gated on
+        membership in NOTIFY_IMPORTANCE_OPTIONS and fell through to `return
+        "max"`, so a near-miss - or any option added to that tuple without a
+        branch - became the LOUDEST setting rather than unset.
+        """
+        built = build_chore(
+            user_input={
+                const.DATA_CHORE_NAME: "Medicine",
+                const.DATA_CHORE_NOTIFICATION_CHANNEL: "Medicine",
+                const.DATA_CHORE_NOTIFICATION_IMPORTANCE: stored,
+            },
+            existing=None,
+        )
+
+        assert built[const.DATA_CHORE_NOTIFICATION_IMPORTANCE] == ""
+
+    def test_every_importance_option_has_its_own_branch(self) -> None:
+        """Pins the const tuple to the narrowing ladder.
+
+        Four places have to agree: NOTIFY_IMPORTANCE_OPTIONS, the Literal in
+        type_defs, the builder's ladder, and the manager's guard. Nothing else
+        holds them together, so adding an option to the tuple without a branch
+        fails here rather than silently unsetting it in production.
+        """
+        for option in const.NOTIFY_IMPORTANCE_OPTIONS:
+            built = build_chore(
+                user_input={
+                    const.DATA_CHORE_NAME: "Medicine",
+                    const.DATA_CHORE_NOTIFICATION_CHANNEL: "Medicine",
+                    const.DATA_CHORE_NOTIFICATION_IMPORTANCE: option,
+                },
+                existing=None,
+            )
+            assert built[const.DATA_CHORE_NOTIFICATION_IMPORTANCE] == option, (
+                f"{option!r} is in NOTIFY_IMPORTANCE_OPTIONS but has no branch "
+                "in _narrow_notification_importance"
+            )
+
     def test_chore_channel_survives_an_unrelated_edit(self) -> None:
         first = build_chore(
             user_input={
